@@ -13,6 +13,7 @@ var DIFFICULTY = parameters.get("difficulty") == null ? 2 : parameters.get("diff
 var TOTAL_ROUNDS = parameters.get("rounds") == null ? 5 : parseInt(parameters.get("rounds"));	
 var DEBUG_MODE = parameters.get("debug") == null ? false : true;
 var MULTIPLAYER = parameters.get("multiplayer") == 'true' ? true : false;
+var GTAV = parameters.get("gtav") == 'true' ? true : false;
 console.log(`Multiplayer mode: ${MULTIPLAYER}`);
 let connection;
 var stableUserId = localStorage.getItem("stable_id");
@@ -28,10 +29,42 @@ var IS_OWNER = true;
 var PLAYERCOUNT = 1;
 var PLAYERS = [];
 
+var MAP;
+var SIDEBAR;
+var ISLAND_BOUNDS;
+var PLACED_MARKER;
+
+var CORRECT_MARKER;
+var DISTANCE_LINE;
+
+var ALL_MARKERS = [];
+var POLY_LINES = [];
+
+var CENTER = [1500, 1500];
+var LAT_BOUNDS = [-3000, 3000];
+var LNG_BOUNDS = [3000, -3000];
+var MAP_IMAGE = "images/map.png";
+var SUBFOLDER = "locations";
+var MIN_ZOOM = -2;
+var MAX_ZOOM = 2;
+
 async function initializeGame() {
     // Set default values in case of invalid input
     if (DIFFICULTY > 3 || DIFFICULTY < 1) { DIFFICULTY = DEFAULT_DIFFICULTY; }
     if (TOTAL_ROUNDS > 20 || TOTAL_ROUNDS < 3) { TOTAL_ROUNDS = DEFAULT_ROUNDS; }
+
+    if (GTAV) {
+        TOTAL_LOCATIONS = 2617;
+        GAME_LOCATIONS = GTAV_LOCATIONS;
+        MAP_IMAGE = "images/GTAV-HD-MAP-satellite.jpg";
+        CENTER = [-4096, 4096];
+        LAT_BOUNDS = [-8192, 0];
+        LNG_BOUNDS = [0, 8192];
+        SUBFOLDER = "locations-v";
+        MIN_ZOOM = -3;
+        MAX_ZOOM = 0;
+        $("#map").css("background-color", "#143d6b");
+    }
 
     if (MULTIPLAYER)
     {
@@ -120,76 +153,68 @@ async function initializeGame() {
         });
     }
 
+    MAP = L.map('map', {
+        renderer: L.canvas(),
+        crs: L.CRS.Simple,
+        center: CENTER,
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
+        scrollWheelZoom: true,
+        zoomControl: false
+    }).setView(CENTER, -1);
+
+    bounds = [new L.LatLngBounds(LAT_BOUNDS, LNG_BOUNDS)];
+
+    L.imageOverlay(MAP_IMAGE, bounds, {
+        }).addTo(MAP);
+
+    MAP.fitBounds(bounds, {padding: [200, 200]});
+
+    SIDEBAR = L.control.sidebar('sidebar', {
+        position: 'left',
+        closeButton: false
+    });
+
     CURRENT_LOCATION = LOCATIONS[0];
     SIDEBAR.on('shown', function () {
-        document.getElementById("image").src = `images/locations/${CURRENT_LOCATION["id"]}.jpg`; 
+        document.getElementById("image").src = `images/${SUBFOLDER}/${CURRENT_LOCATION["id"]}.jpg`; 
+    });
+
+    MAP.addControl(SIDEBAR);
+
+    setTimeout(function () {
+        SIDEBAR.show();
+    }, 500);
+
+    ISLAND_BOUNDS = [];
+    ConfigureIslandBounds();
+
+    $("#hintLocation").text(`Location ${1}/${TOTAL_ROUNDS}`);
+
+
+    MAP.on('click', function(e) {
+        if (PLACED_MARKER) {
+            MAP.removeLayer(PLACED_MARKER);
+        }
+
+        PLACED_MARKER = new L.marker(e.latlng, {
+            draggable: true,
+            icon: L.icon({
+                iconUrl: "images/icons/waypoint.png",
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            })
+        }).addTo(MAP);
+
+        if (DEBUG_MODE) {
+            console.log(`X: ${e.latlng.lng}, Y: ${e.latlng.lat}`);
+        }
+
+        $("#submitButton").removeAttr('disabled');
     });
 }
 
 initializeGame().catch(err => console.error("Error initializing game:", err));
-
-var MAP = L.map('map', {
-    renderer: L.canvas(),
-    crs: L.CRS.Simple,
-    center: [1500, 1500],
-    minZoom: -2,
-    maxZoom: 2,
-    scrollWheelZoom: true,
-    zoomControl: false
-}).setView([1500, 1500], -1);
-
-bounds = [new L.LatLngBounds([-3000, 3000], [3000,-3000])];
-
-L.imageOverlay("images/map.png", bounds, {
-}).addTo(MAP);
-
-MAP.fitBounds(bounds, {padding: [200, 200]});
-
-var SIDEBAR = L.control.sidebar('sidebar', {
-    position: 'left',
-    closeButton: false
-});
-
-MAP.addControl(SIDEBAR);
-
-setTimeout(function () {
-    SIDEBAR.show();
-}, 500);
-
-var ISLAND_BOUNDS = [];
-ConfigureIslandBounds();
-
-
-$("#hintLocation").text(`Location ${1}/${TOTAL_ROUNDS}`);
-
-
-var PLACED_MARKER;
-MAP.on('click', function(e) {
-    if (PLACED_MARKER) {
-        MAP.removeLayer(PLACED_MARKER);
-    }
-
-    PLACED_MARKER = new L.marker(e.latlng, {
-        draggable: true,
-        icon: L.icon({
-            iconUrl: "images/icons/waypoint.png",
-            iconSize: [36, 36],
-            iconAnchor: [18, 18]
-        })
-    }).addTo(MAP);
-
-    if (DEBUG_MODE) {
-        console.log(`X: ${e.latlng.lng}, Y: ${e.latlng.lat}`);
-    }
-
-    $("#submitButton").removeAttr('disabled');
-});
-
-var CORRECT_MARKER;
-var DISTANCE_LINE;
-
-var ALL_MARKERS = [];
-var POLY_LINES = [];
 
 COLORS = [
     "#9a474b",
@@ -285,7 +310,7 @@ $(document).ready(function() {
             }
         }
 
-        if (zoom == 0 && (GetIslandFromMarker(PLACED_MARKER) == GetIslandFromMarker(CORRECT_MARKER))) {
+        if (zoom == 0 && (GetIslandFromMarker(PLACED_MARKER) == GetIslandFromMarker(CORRECT_MARKER)) && !GTAV) {
             resultText += "<br><span id='right-island'>You were on the right Island, though!</span>";
         }
 
@@ -340,9 +365,9 @@ $(document).ready(function() {
 
         $("#hintLocation").text(`Location ${CURRENT_ROUND}/${TOTAL_ROUNDS}`);
 
-        MAP.flyTo([0, 0], -2);
+        MAP.flyTo([-4096, 4096], -2);
         
-        document.getElementById("image").src = `images/locations/${CURRENT_LOCATION["id"]}.jpg`;    
+        document.getElementById("image").src = `images/locations-v/${CURRENT_LOCATION["id"]}.jpg`;    
         
         document.getElementById("resultText").innerHTML = "";
         document.getElementById("guessText").innerHTML = ""; 
@@ -362,7 +387,7 @@ $(document).ready(function() {
         if (MULTIPLAYER && IS_OWNER) {
             connection.invoke("Breakdown").catch(err => console.error("Error invoking Breakdown:", err));
         }
-        MAP.flyTo([0, 0], -2);
+        MAP.flyTo([-4096, 4096], -2);
 
         document.getElementById("image").remove();
         
@@ -513,7 +538,7 @@ $(document).ready(function() {
                 `);
                             
             chosenMarker.bindTooltip(`Guess ${guessCount}, ${readableDistance} away [<b>${guess[2]}</b> points].`);
-            locationMarker.bindTooltip(`Guess ${guessCount}, ${readableDistance} away.<br><img id="tooltip-image" src="images/locations/${locationDetails.id}.jpg" /><br><span id="tooltip-location">${locationDetails.description}.<br><span id="tooltip-location-points"<b>${guess[2]}</b> points.</span></span>`, {
+            locationMarker.bindTooltip(`Guess ${guessCount}, ${readableDistance} away.<br><img id="tooltip-image" src="images/locations-v/${locationDetails.id}.jpg" /><br><span id="tooltip-location">${locationDetails.description}.<br><span id="tooltip-location-points"<b>${guess[2]}</b> points.</span></span>`, {
                 opacity: 1,
                 direction: "right",
                 
@@ -577,8 +602,10 @@ $(document).ready(function() {
     });
 });
 
-var HIDDEN_LINES = [];
-var HIDDEN_MARKERS = [];
+var HIDDEN_LINES;
+HIDDEN_LINES = [];
+var HIDDEN_MARKERS;
+HIDDEN_MARKERS = [];
 
 function onRowHover(id) {
     

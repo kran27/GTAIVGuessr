@@ -1,3 +1,3 @@
 # GTAIVGuessr
 
-Fork of GTAIVGuessr to add multiplayer support (via [GTAIVBackend](https://github.com/kran27/GTAIVBackend)). Playable on [my site](https://gtaiv.kran.gg).
+Fork of GTAIVGuessr to add multiplayer support (via [GTAIVBackend](https://github.com/kran27/GTAIVBackend)). Playable on [my site](https://gtaiv.kran.gg). I have added locations for GTA V from [GTAGuessr](https://gtaguessr.com), if you appreciate the work go support them, not me. If you are from GTAGuessr and have an issue with this, please reach out via my Twitter or Discord (linked on my profile).
