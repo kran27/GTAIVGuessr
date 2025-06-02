@@ -4,17 +4,129 @@ var DEFAULT_DIFFICULTY = 2;
 var DEFAULT_ROUNDS = 5;
 var CURRENT_ROUND = 1;
 var GUESSES = [];
+var OTHER_PEOPLE_GUESSES = {};
 var START_DATE = Date.now() / 1000;
 
 var parameters = new URLSearchParams(window.location.search);
 
 var DIFFICULTY = parameters.get("difficulty") == null ? 2 : parameters.get("difficulty");
-var TOTAL_ROUNDS = parameters.get("rounds") == null ? 5 : parameters.get("rounds");	
+var TOTAL_ROUNDS = parameters.get("rounds") == null ? 5 : parseInt(parameters.get("rounds"));	
 var DEBUG_MODE = parameters.get("debug") == null ? false : true;
+var MULTIPLAYER = parameters.get("multiplayer") == 'true' ? true : false;
+console.log(`Multiplayer mode: ${MULTIPLAYER}`);
+let connection;
+var stableUserId = localStorage.getItem("stable_id");
 
-// Set default values in case of invalid input
-if (DIFFICULTY > 3 || DIFFICULTY < 1) { DIFFICULTY = DEFAULT_DIFFICULTY; }
-if (TOTAL_ROUNDS > 20 || TOTAL_ROUNDS < 3) { TOTAL_ROUNDS = DEFAULT_ROUNDS; }
+var LOCATIONS = [];
+var CURRENT_LOCATION;
+
+var GUESSED = false;
+var GUESSES_TO_SHOW = [];
+var OTHER_GUESSES = [];
+
+var IS_OWNER = true;
+var PLAYERCOUNT = 1;
+var PLAYERS = [];
+
+async function initializeGame() {
+    // Set default values in case of invalid input
+    if (DIFFICULTY > 3 || DIFFICULTY < 1) { DIFFICULTY = DEFAULT_DIFFICULTY; }
+    if (TOTAL_ROUNDS > 20 || TOTAL_ROUNDS < 3) { TOTAL_ROUNDS = DEFAULT_ROUNDS; }
+
+    if (MULTIPLAYER)
+    {
+        connection = await new signalR.HubConnectionBuilder()
+            .withUrl("https://gtaivbackend.kran.gg/hub")
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        connection.on("NameSet", (name) => {
+          localStorage.setItem("user_name", name);
+        });
+
+        connection.on("KeepAlive", () => {
+          // Keep-alive message received, no action needed
+        });
+    
+        connection.on("RoomJoined", (roomName, players, isOwner) => {
+            IS_OWNER = isOwner;
+            PLAYERCOUNT = players.length;
+            PLAYERS = players;
+        });
+
+        connection.on("RandomNumbers", (numbers) => {
+            if (numbers.length != TOTAL_ROUNDS) {
+                console.error("Failed to get the correct amount of random numbers from the server.");
+            }
+            console.log("Random numbers received from server:", numbers);
+            numbers.forEach(location => {
+                LOCATIONS.push(GAME_LOCATIONS[location]);
+            });
+        });
+
+        connection.on("PlayerGuessed", (name, lat, lng, distance, actualDistance, points) => {
+            GUESSES_TO_SHOW.push({
+                name: name,
+                lat: lat,
+                lng: lng,
+                distance: distance,
+                actualDistance: actualDistance,
+                points: points
+            });
+            if (OTHER_PEOPLE_GUESSES[name] == null) {
+                OTHER_PEOPLE_GUESSES[name] = [];
+            }
+            OTHER_PEOPLE_GUESSES[name].push({
+                lat: lat,
+                lng: lng,
+                distance: distance,
+                actualDistance: actualDistance,
+                points: points
+            });
+            if (GUESSED) {
+                displayGuess(name, lat, lng, distance, points);
+            }
+            if (GUESSES_TO_SHOW.length == PLAYERCOUNT - 1 && IS_OWNER && GUESSED) {
+                if (CURRENT_ROUND == TOTAL_ROUNDS) {
+                    document.getElementById("breakdownButton").style.display = "block";
+                } else {
+                    document.getElementById("nextButton").style.display = "block";
+                }
+            }
+        });
+
+        connection.on("NextRound", () => {
+            $("#nextButton").click();
+        });
+
+        connection.on("Breakdown", () => {
+            $("#breakdownButton").click();
+        });
+
+        connection.on("GameStarted", (rounds) => {
+          console.log(`Game started`);
+          window.location.href = `play.html?multiplayer=true&rounds=${rounds}`;
+        });
+
+        await connection.start().catch(err => console.error("SignalR connection failed:", err)).then(() => {
+          console.log("Connected to SignalR hub");
+          connection.invoke("ResumeSession", stableUserId);
+        });
+        await connection.invoke("GetRandomNumbers", TOTAL_ROUNDS, TOTAL_LOCATIONS);
+    } else {
+        var locationIds = GetRandomNumbers(TOTAL_ROUNDS);
+        locationIds.forEach(location => {
+            LOCATIONS.push(GAME_LOCATIONS[location]);
+        });
+    }
+
+    CURRENT_LOCATION = LOCATIONS[0];
+    SIDEBAR.on('shown', function () {
+        document.getElementById("image").src = `images/locations/${CURRENT_LOCATION["id"]}.jpg`; 
+    });
+}
+
+initializeGame().catch(err => console.error("Error initializing game:", err));
 
 var MAP = L.map('map', {
     renderer: L.canvas(),
@@ -36,19 +148,6 @@ MAP.fitBounds(bounds, {padding: [200, 200]});
 var SIDEBAR = L.control.sidebar('sidebar', {
     position: 'left',
     closeButton: false
-});
-
-
-var locationIds = GetRandomNumbers(TOTAL_ROUNDS);
-var LOCATIONS = [];
-locationIds.forEach(location => {
-    LOCATIONS.push(GAME_LOCATIONS[location]);
-});
-
-var CURRENT_LOCATION = LOCATIONS[0];
-
-SIDEBAR.on('shown', function () {
-    document.getElementById("image").src = `images/locations/${CURRENT_LOCATION["id"]}.jpg`; 
 });
 
 MAP.addControl(SIDEBAR);
@@ -92,8 +191,36 @@ var DISTANCE_LINE;
 var ALL_MARKERS = [];
 var POLY_LINES = [];
 
+COLORS = [
+    "#9a474b",
+    "#4f94a2",
+    "#cfa624",
+];
+
+function displayGuess(name, lat, lng, distance, points) {
+    var correctCoordinates = [CURRENT_LOCATION["coordinates"][1], CURRENT_LOCATION["coordinates"][0]];
+
+    var ind = OTHER_GUESSES.length / 2 % 4;
+
+    OTHER_GUESSES.push(new L.marker([lat, lng], {
+        interactive: false,
+        icon: L.icon({
+            iconUrl: `images/icons/waypoint${ind + 1}.png`,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        })
+    }).addTo(MAP));
+
+    OTHER_GUESSES.push(L.polyline([[lat, lng], correctCoordinates], {
+            color: COLORS[ind],
+            weight: 6}).addTo(MAP));
+
+    document.getElementById("guessText").innerHTML += `<br>${name} was <b>${distance}</b> away from the correct location, scoring <b>${points}</b> points.`;
+}
+
 $(document).ready(function() {
     $("#submitButton").click(function() {
+        GUESSED = true;
         var markerCoordinates = PLACED_MARKER.getLatLng();
 
         var correctCoordinates = [CURRENT_LOCATION["coordinates"][1], CURRENT_LOCATION["coordinates"][0]];
@@ -175,15 +302,35 @@ $(document).ready(function() {
 
         GUESSES.push([PLACED_MARKER, CORRECT_MARKER, points]);
 
+        if (MULTIPLAYER) {
+            connection.invoke("SubmitGuess", parseInt(markerCoordinates.lat), parseInt(markerCoordinates.lng), distance, checkDistance, parseInt(points))
+                .catch(err => console.error("Error submitting guess:", err));
+        }
+
+        for (var guess of GUESSES_TO_SHOW) {
+            displayGuess(guess.name, guess.lat, guess.lng, guess.distance, guess.points);
+        }
+
         document.getElementById("submitButton").style.display = "none";
-        if (CURRENT_ROUND == TOTAL_ROUNDS) {
-            document.getElementById("breakdownButton").style.display = "block";
-        } else {
-            document.getElementById("nextButton").style.display = "block";
+        if (IS_OWNER && GUESSES_TO_SHOW.length == PLAYERCOUNT - 1) {
+            if (CURRENT_ROUND == TOTAL_ROUNDS) {
+                document.getElementById("breakdownButton").style.display = "block";
+            } else {
+                document.getElementById("nextButton").style.display = "block";
+            }
         }
     });
 
     $("#nextButton").click(function() {
+        GUESSED = false;
+        for (var guess of OTHER_GUESSES) {
+            MAP.removeLayer(guess);
+        }
+        OTHER_GUESSES = [];
+        GUESSES_TO_SHOW = [];
+        if (MULTIPLAYER && IS_OWNER) {
+            connection.invoke("NextRound").catch(err => console.error("Error invoking NextRound:", err));
+        }
         MAP.removeLayer(PLACED_MARKER);
         MAP.removeLayer(CORRECT_MARKER);
         MAP.removeLayer(DISTANCE_LINE);
@@ -206,6 +353,15 @@ $(document).ready(function() {
     });
 
     $("#breakdownButton").click(function() {
+        GUESSED = false;
+        for (var guess of OTHER_GUESSES) {
+            MAP.removeLayer(guess);
+        }
+        OTHER_GUESSES = [];
+        GUESSES_TO_SHOW = [];
+        if (MULTIPLAYER && IS_OWNER) {
+            connection.invoke("Breakdown").catch(err => console.error("Error invoking Breakdown:", err));
+        }
         MAP.flyTo([0, 0], -2);
 
         document.getElementById("image").remove();
@@ -215,29 +371,59 @@ $(document).ready(function() {
         document.getElementById("guessText").innerHTML = ""; 
 
         document.getElementById("breakdown").innerHTML = "BREAKDOWN";
-        document.getElementById("breakdown-content").style.display = "block";
+        var bdc = document.getElementById("breakdown-content");
+        bdc.style.display = "block";
 
         var timeLeft = 5;
-        document.getElementById("playAgainButton").style.display = "block";
-        $("#playAgainButton").attr('disabled', 'true');
-        $("#playAgainButton").html(`${timeLeft}...`);
-
-        var buttonCountdown = setInterval(function() {            
-            timeLeft--;
-
-            if (timeLeft <= 0) {
-                clearInterval(buttonCountdown);
-                $("#playAgainButton").removeAttr('disabled');
-                $("#playAgainButton").html("play again!");
-                return;
-            }
-
+        if (IS_OWNER) {
+            document.getElementById("playAgainButton").style.display = "block";
+            $("#playAgainButton").attr('disabled', 'true');
             $("#playAgainButton").html(`${timeLeft}...`);
-        }, 1000);
+
+            var buttonCountdown = setInterval(function() {            
+                timeLeft--;
+
+                if (timeLeft <= 0) {
+                    clearInterval(buttonCountdown);
+                    $("#playAgainButton").removeAttr('disabled');
+                    $("#playAgainButton").html("play again!");
+                    return;
+                }
+
+                $("#playAgainButton").html(`${timeLeft}...`);
+            }, 1000);
+        }
+
+        // add new table for each player
+        for (var player of PLAYERS) {
+            if (player == localStorage.getItem("user_name")) {
+                continue; // Skip the current player
+            }
+            $("#breakdown-content").append(
+                `<h3>${player}'s guesses</h3>
+                <table id="breakdown-table-${player}" class="table table-striped table-dark text-center table-hover">
+                <thead>
+                    <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">Correct Island</th>
+                        <th scope="col">Distance Away</th>
+                        <th scope="col">Right Area?</th>
+                        <th scope="col">Points</th>
+                    </tr>
+                </thead>
+                <tfoot>
+				<tr>
+					<th id="total-text" colspan="4"></span>Total:</th>
+      				<td id="total-points-${player}"></td>
+				  </tr>
+			    </tfoot>
+                </table>`);
+        }
 
         guessCount = 0;
         totalPoints = 0;
-        for (var guess of GUESSES) {
+        for (var i = 0; i < GUESSES.length; i++) {
+            let guess = GUESSES[i];
             guessCount++;
             
             totalPoints += guess[2];
@@ -258,6 +444,42 @@ $(document).ready(function() {
                     iconAnchor: [18, 18]
                 })
             }).addTo(MAP);
+
+            console.log(OTHER_PEOPLE_GUESSES);
+            console.log(PLAYERS);
+
+            var j = 0;
+            for (var player of PLAYERS) {
+                if (player == localStorage.getItem("user_name")) {
+                    continue; // Skip the current player
+                }
+                var player_guess = OTHER_PEOPLE_GUESSES[player][i];
+                OTHER_GUESSES.push(new L.marker([player_guess.lat, player_guess.lng], {
+                    interactive: false,
+                    icon: L.icon({
+                        iconUrl: `images/icons/waypoint${(j % 4) + 1}.png`,
+                        iconSize: [36, 36],
+                        iconAnchor: [18, 18]
+                    })
+                }).addTo(MAP));
+                OTHER_GUESSES.push(L.polyline([[player_guess.lat, player_guess.lng], correctCoordinates], {
+                    color: COLORS[j % 4],
+                    weight: 6}).addTo(MAP));
+
+                $(`#breakdown-table-${player}`).append(
+                    `
+                    <tbody id="tableBody" class="align-middle">
+                    <tr onmouseover="onRowHover(${guessCount})" onmouseleave="onRowLeave(${guessCount})" onmousedown="onRowClick(${guessCount})">
+                    <th>${guessCount}</th>
+                    <td>${locationIslandText}</td>
+                    <td>${player_guess.distance}</td>
+                    <td><span id='${player_guess.actualDistance <= 200 ? "correctIcon" : "incorrectIcon"}'>${player_guess.actualDistance <= 200 ? "\u2714" : "\u274C"}</span></td>
+                    <td>${player_guess.points}</td>
+                    </tr>                 
+                    `);
+
+                j++;
+            }
     
             var locationMarker = new L.marker(correctCoordinates, {
                 interactive: true,
@@ -274,7 +496,7 @@ $(document).ready(function() {
             var locationIslandText = GetIslandFromMarker(locationMarker);
             
             var icon = "<span id='incorrectIcon'>\u274C</span>";
-            if (actualDistance <= 25) {
+            if (actualDistance <= 200) {
                 icon = "<span id='correctIcon'>\u2714</span>";
             }
     
@@ -304,6 +526,16 @@ $(document).ready(function() {
 
 
         $("#total-points").html(`${totalPoints}/${TOTAL_ROUNDS * 500}`);
+        for (var player of PLAYERS) {
+            if (player == localStorage.getItem("user_name")) {
+                continue; // Skip the current player
+            }
+            var totalPoints = 0;
+            for (var guess of OTHER_PEOPLE_GUESSES[player]) {
+                totalPoints += guess.points;
+            }
+            $(`#total-points-${player}`).html(`${totalPoints}/${TOTAL_ROUNDS * 500}`);
+        }
 
         document.getElementById("sidebar").style.width = "25vw";
         document.getElementById("hintBox").style.height = "2.5vh";
@@ -331,8 +563,13 @@ $(document).ready(function() {
         localStorage.setItem("recentGames", JSON.stringify(RECENT_GAMES));
     });
 
-    $("#playAgainButton").click(function() { 
-        window.location.reload();
+    $("#playAgainButton").click(function() {
+        if (MULTIPLAYER) {
+            connection.invoke("StartGame", 5).catch(err => console.error("StartGame failed:", err));
+        }
+        else {
+            window.location.reload();
+        }
     });
 
     $("#exitButton").click(function() { 

@@ -13,22 +13,21 @@
       <br>
       <h1 id="game-title">GTA IV</h1>
       <h1 id="game-subtitle">guessr</h1>
-      <form action="play.html" method="GET">
-        <div style="pointer-events: none;" class="difficulty">
-          <label  for="difficulty-select">Difficulty (Disabled):</label>
-          <select id="difficulty-select" name="difficulty">
-            <option value="1">Easy</option>
-            <option value="2">Medium</option>
-            <option value="3">Hard</option>
-          </select>
-        </div>
-        <div class="rounds">
-          <label for="round-amount">Rounds:</label>
-          <input data-slider-id="round-amount-line" name="rounds" type="range" min="3" max="20" value="5" class="slider" id="round-amount"><span id="round-value">5</span>
-        </div>
-        <input type="submit" id="play-button" class="btn btn-primary shadow-none" value="Play">
-      </form>
-      <p id="credit-text">Made by <a target="_blank" href="https://www.steamcommunity.com/id/MrKwabs" id="credit-link">Mr.Kwabs</a>. View on <a target="_blank" href="https://github.com/YoinkyYoinkers/GTAIVGuessr" id="credit-link">GitHub</a>.</p>
+      <div class="holder">
+        <form action="play.html" method="GET">
+          <h1>Play Solo</h1>
+          <div class="rounds">
+            <label for="round-amount">Rounds:</label>
+            <input data-slider-id="round-amount-line" name="rounds" type="range" min="3" max="20" value="5" class="slider" id="round-amount"><span id="round-value">5</span>
+          </div>
+          <input type="submit" id="play-button" class="btn btn-primary shadow-none" value="Play">
+        </form>
+        <form action="multiplayer.html" method="GET">
+          <h1>Play Multiplayer</h1>
+          <input type="submit" id="play-button" class="btn btn-primary shadow-none" value="Play">
+        </form>
+      </div>
+      <p id="credit-text">Original by <a target="_blank" href="https://www.steamcommunity.com/id/MrKwabs" id="credit-link">Mr.Kwabs</a>. Multiplayer by <a target="_blank" href="https://github.com/kran27" id="credit-link">Kran</a>. View on <a target="_blank" href="https://github.com/kran27/GTAIVGuessr" id="credit-link">GitHub</a>.</p>
       <p id="delete-scores"><a href="scores.html" id="credit-link">View High-Scores</a></p>
       <p id="credit-subtext">Locations & ideas from <a id="credit-link" target="_blank" href="https://gtaforums.com/profile/1180742-brynnadarosa/">BrynnaDaRosa</a></p>
     </div>

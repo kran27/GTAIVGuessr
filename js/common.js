@@ -1,4 +1,4 @@
-var TOTAL_LOCATIONS = 60;
+var TOTAL_LOCATIONS = 76;
 var RECENT_GAMES = [];
 
 if (localStorage.getItem("recentGames") != null) {
@@ -37,6 +37,8 @@ function GetRandomNumber() {
 
 /**
  * @param {Number} count Amount of numbers to fetch
+ * @param {Boolean} isMultiplayer If the game is multiplayer (pulling numbers from server)
+ * @param {Object} connection SignalR connection object (null if not multiplayer)
  * @returns {Array} List of unique random numbers
  */
 function GetRandomNumbers(count) {

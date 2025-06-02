@@ -6,6 +6,7 @@ body {
     justify-content: center;
     height: 100vh;
     backdrop-filter: blur(15px);
+    color: white;
 }
 
 .center-div {
@@ -24,7 +25,12 @@ h1 {
     font-size: 36px;
     font-weight: bold;
     margin-bottom: 20px;
-    color: #333;
+    color: #fff;
+    font-family: "pricedownblack";
+}
+
+h3 {
+    color: #fff;
 }
 
 .difficulty {
@@ -39,7 +45,6 @@ h1 {
     font-size: 24px;
     margin-right: 10px;
     color: white;
-
 }
 
 .difficulty select {
@@ -146,8 +151,6 @@ input[type="range"]::-webkit-slider-thumb {
     margin-top: 5px;
 }
 
-
-
 #credit-subtext {
     position: absolute;
     bottom: -15px;
@@ -164,4 +167,17 @@ input[type="range"]::-webkit-slider-thumb {
     bottom: -15px;
     left: 5px;
     cursor: pointer;
+}
+
+.holder {
+    display:flex;
+}
+
+.holder h1 {
+    -webkit-text-stroke: 2px black;
+}
+
+.holder form {
+    width: 50%;
+    margin:2em;
 }
